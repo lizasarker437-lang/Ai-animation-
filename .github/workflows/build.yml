@@ -19,9 +19,6 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-
     # ১. গিটহাবের ভেতরেই স্বয়ংক্রিয়ভাবে পুরো অ্যান্ড্রয়েড প্রজেক্ট স্ট্রাকচার ও ফাইল তৈরি করা
     - name: Generate Android Project Files
       run: |
