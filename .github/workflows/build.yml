@@ -1,47 +1,221 @@
-name: Single File All-in-One Android Build
+name: Auto Build Floating Fish APK
 
 on:
   push:
     branches: [ "main", "master" ]
-  workflow_dispatch: # ম্যানুয়ালি গিটহাব থেকেও রান করাতে পারবেন
+  workflow_dispatch:
 
 jobs:
-  build-apk:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-    # ১. গিটহাব থেকে রিপোজিটরি নামিয়ে নেওয়া
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    # ২. জাভা (JDK 17) সেটআপ করা
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
 
-    # ৩. গ্রেডল ক্যাশ কনফিগার করা
-    - name: Setup Gradle Cache
-      uses: gradle/actions/setup-gradle@v3
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
 
-    # ৪. একক ফাইলে বা প্রজেক্টে প্রয়োজনীয় ফোল্ডার ও কোড স্ট্রাকচার ভেরিফাই বা তৈরি করা
-    - name: Prepare Project Structure
+    # ১. গিটহাবের ভেতরেই স্বয়ংক্রিয়ভাবে পুরো অ্যান্ড্রয়েড প্রজেক্ট স্ট্রাকচার ও ফাইল তৈরি করা
+    - name: Generate Android Project Files
       run: |
-        echo "Checking project files..."
-        if [ ! -f "gradlew" ]; then
-          echo "Gradle wrapper not found, generating..."
-          gradle wrapper
-        fi
-        chmod +x gradlew
+        mkdir -p app/src/main/java/com/example/aianimation
+        mkdir -p app/src/main/res/values
 
-    # ৫. সরাসরি Gradle দিয়ে প্রজেক্ট কম্পাইল করে Debug APK তৈরি করা
-    - name: Build Debug APK with Gradle
+        # 1. AndroidManifest.xml
+        cat << 'EOF' > app/src/main/AndroidManifest.xml
+        <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+            package="com.example.aianimation">
+
+            <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+            <application
+                android:allowBackup="true"
+                android:icon="@android:drawable/star_on"
+                android:label="Floating Fish"
+                android:roundIcon="@android:drawable/star_on"
+                android:supportsRtl="true"
+                android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+                
+                <service
+                    android:name=".FloatingFishService"
+                    android:exported="false" />
+            </application>
+        </manifest>
+        EOF
+
+        # 2. FloatingFishService.kt (ড্রাগ করার সুবিধাসহ সম্পূর্ণ কোড)
+        cat << 'EOF' > app/src/main/java/com/example/aianimation/FloatingFishService.kt
+        package com.example.aianimation
+
+        import android.app.Service
+        import android.content.Intent
+        import android.graphics.PixelFormat
+        import android.os.Build
+        import android.os.IBinder
+        import android.view.Gravity
+        import android.view.MotionEvent
+        import android.view.View
+        import android.view.WindowManager
+        import android.widget.ImageView
+
+        class FloatingFishService : Service() {
+            private lateinit var windowManager: WindowManager
+            private lateinit var fishView: ImageView
+            private lateinit var layoutParams: WindowManager.LayoutParams
+            private var initialX = 0
+            private var initialY = 0
+            private var initialTouchX = 0f
+            private var initialTouchY = 0f
+
+            override fun onBind(intent: Intent?): IBinder? = null
+
+            override fun onCreate() {
+                super.onCreate()
+                windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+
+                fishView = ImageView(this).apply {
+                    setImageResource(android.R.drawable.star_on)
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                }
+
+                val LAYOUT_FLAG = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                } else {
+                    WindowManager.LayoutParams.TYPE_PHONE
+                }
+
+                layoutParams = WindowManager.LayoutParams(
+                    150, 150,
+                    LAYOUT_FLAG,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                    PixelFormat.TRANSLUCENT
+                ).apply {
+                    gravity = Gravity.TOP or Gravity.START
+                    x = 100
+                    y = 200
+                }
+
+                fishView.setOnTouchListener { _, event ->
+                    when (event.action) {
+                        MotionEvent.ACTION_DOWN -> {
+                            initialX = layoutParams.x
+                            initialY = layoutParams.y
+                            initialTouchX = event.rawX
+                            initialTouchY = event.rawY
+                            true
+                        }
+                        MotionEvent.ACTION_MOVE -> {
+                            layoutParams.x = initialX + (event.rawX - initialTouchX).toInt()
+                            layoutParams.y = initialY + (event.rawY - initialTouchY).toInt()
+                            windowManager.updateViewLayout(fishView, layoutParams)
+                            true
+                        }
+                        else -> false
+                    }
+                }
+
+                windowManager.addView(fishView, layoutParams)
+            }
+
+            override fun onDestroy() {
+                super.onDestroy()
+                if (::fishView.isInitialized) {
+                    windowManager.removeView(fishView)
+                }
+            }
+        }
+        EOF
+
+        # 3. build.gradle (Module: app)
+        cat << 'EOF' > app/build.gradle
+        plugins {
+            id 'com.android.application'
+            id 'org.jetbrains.kotlin.android'
+        }
+
+        android {
+            namespace 'com.example.aianimation'
+            compileSdk 34
+
+            defaultConfig {
+                applicationId "com.example.aianimation"
+                minSdk 24
+                targetSdk 34
+                versionCode 1
+                versionName "1.0"
+            }
+        }
+
+        dependencies {
+            implementation 'androidx.core:core-ktx:1.12.0'
+            implementation 'androidx.appcompat:appcompat:1.6.1'
+        }
+        EOF
+
+        # 4. build.gradle (Project level)
+        cat << 'EOF' > build.gradle
+        buildscript {
+            repositories {
+                google()
+                mavenCentral()
+            }
+            dependencies {
+                classpath 'com.android.tools.build:gradle:8.1.4'
+                classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.0"
+            }
+        }
+        allprojects {
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+        EOF
+
+        # 5. settings.gradle
+        cat << 'EOF' > settings.gradle
+        pluginManagement {
+            repositories {
+                google()
+                mavenCentral()
+                gradlePluginPortal()
+            }
+        }
+        dependencyResolutionManagement {
+            repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+            repositories {
+                google()
+                mavenCentral()
+            }
+        }
+        rootProject.name = "AI Animation"
+        include ':app'
+        EOF
+
+        # 6. gradle.properties
+        cat << 'EOF' > gradle.properties
+        android.useAndroidX=true
+        android.enableJetifier=true
+        EOF
+
+        # Gradle Wrapper জেনারেট করা
+        gradle wrapper
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Build Debug APK
       run: ./gradlew assembleDebug
 
-    # ৬. তৈরি হওয়া APK ফাইলটি GitHub Artifact হিসেবে সেভ করে রাখা (যাতে ডাউনলোড করা যায়)
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: FloatingFish-Debug-APK
+        name: FloatingFish-APK
         path: app/build/outputs/apk/debug/app-debug.apk
