@@ -19,7 +19,7 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    # ১. গিটহাবের ভেতরেই স্বয়ংক্রিয়ভাবে পুরো অ্যান্ড্রয়েড প্রজেক্ট স্ট্রাকচার ও ফাইল তৈরি করা
+    # ১. সঠিক অ্যান্ড্রয়েড প্রজেক্ট ফাইল ও মডার্ন কনফিগারেশন তৈরি করা
     - name: Generate Android Project Files
       run: |
         mkdir -p app/src/main/java/com/example/aianimation
@@ -130,7 +130,7 @@ jobs:
         }
         EOF
 
-        # 3. build.gradle (Module: app)
+        # 3. app/build.gradle
         cat << 'EOF' > app/build.gradle
         plugins {
             id 'com.android.application'
@@ -148,6 +148,15 @@ jobs:
                 versionCode 1
                 versionName "1.0"
             }
+
+            compileOptions {
+                sourceCompatibility JavaVersion.VERSION_17
+                targetCompatibility JavaVersion.VERSION_17
+            }
+
+            kotlinOptions {
+                jvmTarget = '17'
+            }
         }
 
         dependencies {
@@ -156,15 +165,15 @@ jobs:
         }
         EOF
 
-        # 4. build.gradle (Project level - সংশোধিত ও আধুনিক গ্রেডল সংস্করণের উপযোগী)
+        # 4. build.gradle (Project level)
         cat << 'EOF' > build.gradle
         plugins {
-            id 'com.android.application' version '8.1.4' apply false
-            id 'org.jetbrains.kotlin.android' version '1.9.0' apply false
+            id 'com.android.application' version '8.2.0' apply false
+            id 'org.jetbrains.kotlin.android' version '1.9.20' apply false
         }
         EOF
 
-        # 5. settings.gradle (সকল রিপোজিটরি এখানে সেন্ট্রালাইজড করা হয়েছে)
+        # 5. settings.gradle
         cat << 'EOF' > settings.gradle
         pluginManagement {
             repositories {
@@ -188,10 +197,11 @@ jobs:
         cat << 'EOF' > gradle.properties
         android.useAndroidX=true
         android.enableJetifier=true
+        org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
         EOF
 
         # Gradle Wrapper জেনারেট করা
-        gradle wrapper
+        gradle wrapper --gradle-version 8.2.0
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
